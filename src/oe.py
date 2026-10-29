@@ -40,6 +40,7 @@ xbmcm = xbmc.Monitor()
 
 is_service = False
 conf_lock = False
+gui_lock = threading.RLock()
 __busy__ = 0
 xbmcIsPlaying = 0
 input_request = False
@@ -427,7 +428,14 @@ def set_service(service, options, state):
             if os.path.exists(cfo):
                 os.rename(cfo, cfn)
         if not __oe__.is_service:
-            if service in defaults._services:
+            if service == 'samba':
+                # smbd reads /run/samba/smb.conf, written only by samba-config.
+                # Stop first so smbpasswd can replace /run/samba/smbpasswd.
+                execute('systemctl stop smbd.service nmbd.service')
+                execute('systemctl restart samba-config.service')
+                if state == 1:
+                    execute('systemctl start nmbd.service smbd.service')
+            elif service in defaults._services:
                 for svc in defaults._services[service]:
                     execute('systemctl restart %s' % svc)
         dbg_log('oe::set_service', 'exit_function', LOGDEBUG)

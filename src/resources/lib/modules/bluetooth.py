@@ -23,6 +23,16 @@ import oeWindows
 BT_DEVICES_LIST_REFRESH_INTERVAL_SECONDS = 5
 
 
+def bluetooth_menu_active():
+    try:
+        if not hasattr(oe, 'winOeMain') or not oe.winOeMain.visible:
+            return False
+        item = oe.winOeMain.getControl(oe.winOeMain.guiMenList).getSelectedItem()
+        return item is not None and item.getProperty('modul') == 'bluetooth'
+    except Exception:
+        return False
+
+
 def rssi_to_percentage(rssi):
     min_rssi = -100
     max_rssi = -30
@@ -332,6 +342,8 @@ class bluetooth(modules.Module):
                 dbus_bluez.adapter_remove_device(self.dbusBluezAdapter, path)
             except Exception:
                 pass
+        except TimeoutError:
+            oe.notify('Bluetooth', 'Pairing timed out', 'bt')
         finally:
             oe.set_busy(0)
 
@@ -442,10 +454,13 @@ class bluetooth(modules.Module):
 
     @log.log_function()
     def discover_devices(self):
-        with self.discover_lock:
-            self._discover_devices()
+        with oe.gui_lock:
+            with self.discover_lock:
+                self._discover_devices()
 
     def _discover_devices(self):
+        if not bluetooth_menu_active():
+            return
         if not hasattr(oe, 'winOeMain'):
             return
         if not oe.winOeMain.visible:
@@ -534,20 +549,20 @@ class bluetooth(modules.Module):
                             self.listItems[dbusDevice].setProperty(dictProperty, dictProperties[dictProperty])
                         except KeyError as e:
                             log.log(f'Suppressed error: {repr(e)}', log.INFO)
-            self.remove_duplicate_list_items(control_list)
-            for dbusDevice in deactivated_devices:
-                i = control_list.size() - 1
-                while i >= 0:
-                    if control_list.getListItem(i).getProperty('entry') == dbusDevice:
-                        control_list.removeItem(i)
-                    i -= 1
-                self.listItems.pop(dbusDevice, None)
-            if (new_devices or deactivated_devices) and selected_dbus_device is not None:
-                for i in range(control_list.size()):
-                    list_item = control_list.getListItem(i)
-                    if list_item.getProperty('entry') == selected_dbus_device:
-                        control_list.selectItem(i)
-                        break
+        self.remove_duplicate_list_items(control_list)
+        for removed in deactivated_devices:
+            i = control_list.size() - 1
+            while i >= 0:
+                if control_list.getListItem(i).getProperty('entry') == removed:
+                    control_list.removeItem(i)
+                i -= 1
+            self.listItems.pop(removed, None)
+        if (new_devices or deactivated_devices) and selected_dbus_device is not None:
+            for i in range(control_list.size()):
+                list_item = control_list.getListItem(i)
+                if list_item.getProperty('entry') == selected_dbus_device:
+                    control_list.selectItem(i)
+                    break
 
     @log.log_function()
     def open_context_menu(self, listItem):
@@ -624,8 +639,10 @@ class bluetooth(modules.Module):
     @log.log_function()
     def close_pinkey_window(self):
         if hasattr(self, 'pinkey_timer'):
-            self.pinkey_timer.stop()
-            self.pinkey_timer.join()
+            timer = self.pinkey_timer
+            timer.stop()
+            if timer is not threading.current_thread() and timer.is_alive():
+                timer.join()
             self.pinkey_timer = None
             del self.pinkey_timer
         if hasattr(self, 'pinkey_window'):
@@ -887,13 +904,19 @@ class Bluez_Listener(dbus_bluez.Listener):
                 'Trusted',
                 'Icon',
                 ]
-            if path in self.parent.listItems:
-                for prop in changed:
-                    if prop in properties:
-                        self.parent.listItems[path].setProperty(str(prop), str(changed[prop]))
-                if 'RSSI' in changed:
-                    self.parent.listItems[path].setProperty('Strength', str(rssi_to_percentage(int(changed['RSSI']))))
-            else:
+            refresh = False
+            with oe.gui_lock:
+                if not bluetooth_menu_active():
+                    return
+                if path in self.parent.listItems:
+                    for prop in changed:
+                        if prop in properties:
+                            self.parent.listItems[path].setProperty(str(prop), str(changed[prop]))
+                    if 'RSSI' in changed:
+                        self.parent.listItems[path].setProperty('Strength', str(rssi_to_percentage(int(changed['RSSI']))))
+                else:
+                    refresh = True
+            if refresh:
                 self.parent.discover_devices()
 
 
@@ -1118,11 +1141,12 @@ class discoveryThread(threading.Thread):
         self._stop_event.clear()
         while not self.stopped and not oe.xbmcm.abortRequested():
             current_time = time.monotonic()
-            if (self.main_menu.getSelectedItem().getProperty('modul') == 'bluetooth'
-                    and current_time > self.last_run + BT_DEVICES_LIST_REFRESH_INTERVAL_SECONDS):
+            with oe.gui_lock:
+                on_bluetooth = bluetooth_menu_active()
+            if on_bluetooth and current_time > self.last_run + BT_DEVICES_LIST_REFRESH_INTERVAL_SECONDS:
                 self.parent.discover_devices()
                 self.last_run = current_time
-            elif self.main_menu.getSelectedItem().getProperty('modul') != 'bluetooth':
+            elif not on_bluetooth:
                 self.stop()
             oe.xbmcm.waitForAbort(1)
 

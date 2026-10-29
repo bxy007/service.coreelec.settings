@@ -344,11 +344,12 @@ class mainWindow(xbmcgui.WindowXMLDialog):
                     if hasattr(self.oe.dictModules[selectedMenuItem.getProperty('modul')], selectedItem.getProperty('action')):
                         getattr(self.oe.dictModules[selectedMenuItem.getProperty('modul')], selectedItem.getProperty('action'
                                 ))(listItem=selectedItem)
-                        self.emptyButtonLabels()
-                self.lastMenu = -1
-                self.onFocus(self.guiMenList)
-                self.setFocusId(controlID)
-                self.getControl(controlID).selectItem(selectedPosition)
+                with self.oe.gui_lock:
+                    self.emptyButtonLabels()
+                    self.lastMenu = -1
+                    self.onFocus(self.guiMenList)
+                    self.setFocusId(controlID)
+                    self.getControl(controlID).selectItem(selectedPosition)
             self.oe.dbg_log('oeWindows::onClick', 'exit_function', self.oe.LOGDEBUG)
         except Exception as e:
             self.oe.dbg_log('oeWindows.mainWindow::onClick(' + str(controlID) + ')', 'ERROR: (' + repr(e) + ')')
