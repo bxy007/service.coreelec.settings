@@ -4,6 +4,8 @@
 # Copyright (C) 2019-present Team LibreELEC (https://libreelec.tv)
 # Copyright (C) 2020-present Team CoreELEC (https://coreelec.org)
 
+import asyncio
+import concurrent.futures
 import threading
 import time
 import weakref
@@ -14,6 +16,8 @@ from dbussy import DBusError
 
 import dbus_bluez
 import dbus_obex
+import dbus_utils
+import bluetooth_reconnect
 import hostname
 import log
 import modules
@@ -1097,17 +1101,25 @@ class connectionThread(threading.Thread):
 
     @log.log_function()
     def run(self):
-        devices = self.parent.get_devices()
-        for path, props in devices.items():
-            if self._stop_event.is_set() or oe.xbmcm.abortRequested():
-                break
-            if props.get('Paired') and not props.get('Connected'):
+        def stopped():
+            return (self._stop_event.is_set() or oe.xbmcm.abortRequested()
+                    or oe.get_service_option('bluez', 'CONNECT_PAIRED', '1') != '1')
+
+        future = asyncio.run_coroutine_threadsafe(bluetooth_reconnect.reconnect(
+            dbus_utils.call_async_method, lambda message: log.log(message, log.INFO),
+            stopped), dbus_utils.LOOP)
+        try:
+            while not stopped():
                 try:
-                    log.log(f'Auto-connecting paired device: {path}', log.DEBUG)
-                    dbus_bluez.device_connect(path)
-                except Exception as e:
-                    log.log(f'Failed to auto-connect {path}: {e}', log.DEBUG)
-                oe.xbmcm.waitForAbort(1)
+                    future.result(timeout=0.1)
+                    break
+                except concurrent.futures.TimeoutError:
+                    if future.done():
+                        raise
+        except concurrent.futures.CancelledError:
+            pass
+        finally:
+            future.cancel()
 
 
 class discoveryThread(threading.Thread):
