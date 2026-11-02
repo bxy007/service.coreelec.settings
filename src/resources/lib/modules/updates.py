@@ -49,7 +49,7 @@ class updates:
                             'value': 'manual',
                             'action': 'set_auto_update',
                             'type': 'multivalue',
-                            'values': ['auto', 'manual'],
+                            'values': ['manual', 'auto'],
                             'InfoText': 714,
                             'order': 1,
                             },
@@ -64,7 +64,7 @@ class updates:
                         'UpdateNotify': {
                             'name': 32365,
                             'value': '0',
-                            'action': 'set_value',
+                            'action': 'set_auto_update',
                             'type': 'bool',
                             'InfoText': 715,
                             'order': 3,
@@ -183,6 +183,7 @@ class updates:
             self.keyboard_layouts = False
             self.nox_keyboard_layouts = False
             self.last_update_check = 0
+            self.update_json = None
             self.arrVariants = {}
             self.oe.dbg_log('updates::__init__', 'exit_function', self.oe.LOGDEBUG)
         except Exception as e:
@@ -198,6 +199,11 @@ class updates:
             self.oe.dbg_log('updates::start_service', 'exit_function', self.oe.LOGDEBUG)
         except Exception as e:
             self.oe.dbg_log('updates::start_service', 'ERROR: (' + repr(e) + ')')
+
+    def automatic_checks_enabled(self):
+        settings = self.struct['update']['settings']
+        return (settings['AutoUpdate']['value'] == 'auto'
+                or settings['UpdateNotify']['value'] == '1')
 
     def stop_service(self):
         try:
@@ -334,7 +340,8 @@ class updates:
             if not value is None:
                 self.struct['update']['settings']['CustomChannel3']['value'] = value
 
-            self.update_json = self.build_json()
+            if self.automatic_checks_enabled():
+                self.update_json = self.build_json()
 
             self.struct['update']['settings']['Channel']['values'] = self.get_channels()
             self.struct['update']['settings']['Build']['values'] = self.get_available_builds()
@@ -360,6 +367,12 @@ class updates:
     def load_menu(self, focusItem):
         try:
             self.oe.dbg_log('updates::load_menu', 'enter_function', self.oe.LOGDEBUG)
+            # Manual updates still need the channel/build choices. Fetch them
+            # when the user opens this page instead of on every startup.
+            if self.update_json is None:
+                self.update_json = self.build_json()
+                self.struct['update']['settings']['Channel']['values'] = self.get_channels()
+                self.struct['update']['settings']['Build']['values'] = self.get_available_builds()
             self.oe.winOeMain.build_menu(self.struct)
             self.oe.dbg_log('updates::load_menu', 'exit_function', self.oe.LOGDEBUG)
         except Exception as e:
@@ -592,6 +605,8 @@ class updates:
     def check_updates_v2(self, force=False):
         try:
             self.oe.dbg_log('updates::check_updates_v2', 'enter_function', self.oe.LOGDEBUG)
+            if not force and not self.automatic_checks_enabled():
+                return
             if hasattr(self, 'update_in_progress'):
                 self.oe.dbg_log('updates::check_updates_v2', 'Update in progress (exit)', self.oe.LOGDEBUG)
                 return
@@ -787,7 +802,8 @@ class updateThread(threading.Thread):
                 if not hasattr(self.oe.dictModules['updates'], 'update_in_progress'):
                     self.wait_evt.wait(21600)
                 else:
-                    if not xbmc.Player().isPlaying():
+                    if (not xbmc.Player().isPlaying()
+                            and self.oe.dictModules['updates'].struct['update']['settings']['UpdateNotify']['value'] == '1'):
                         self.oe.notify(self.oe._(32363), self.oe._(32364))
                     self.wait_evt.wait(3600)
                 self.wait_evt.clear()
