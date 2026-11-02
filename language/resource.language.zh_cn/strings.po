@@ -1399,3 +1399,7 @@ msgstr "访问控制密钥"
 msgctxt "#33530"
 msgid "Connection name"
 msgstr "连接名称"
+
+msgctxt "#33532"
+msgid "Battery"
+msgstr "电量"

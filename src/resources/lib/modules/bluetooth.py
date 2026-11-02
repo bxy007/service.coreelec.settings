@@ -517,6 +517,7 @@ class bluetooth(modules.Module):
             dictProperties['entry'] = dbusDevice
             dictProperties['modul'] = self.__class__.__name__
             dictProperties['action'] = 'open_context_menu'
+            dictProperties['BatteryLevel'] = device_properties.get('BatteryLevel', '')
             if not 'Icon' in device_properties:
                 dictProperties['Icon'] = 'default'
             if 'RSSI' in device_properties:
@@ -856,6 +857,8 @@ class Bluez_Listener(dbus_bluez.Listener):
 
     @log.log_function()
     def on_interfaces_removed(self, path, interfaces):
+        if dbus_bluez.INTERFACE_BATTERY in interfaces:
+            self._update_battery(path, None)
         if dbus_bluez.INTERFACE_ADAPTER in interfaces:
             self.parent.dbusBluezAdapter = None
         if self.parent.visible and not hasattr(self.parent, 'discovery_thread'):
@@ -863,6 +866,10 @@ class Bluez_Listener(dbus_bluez.Listener):
 
     @log.log_function()
     def on_properties_changed(self, interface, changed, invalidated, path):
+        if interface == dbus_bluez.INTERFACE_BATTERY:
+            if 'Percentage' in changed or 'Percentage' in invalidated:
+                self._update_battery(path, changed.get('Percentage'))
+            return
         if 'Connected' in changed and not oe.xbmcm.abortRequested():
             now = time.monotonic()
             if changed['Connected']:
@@ -918,10 +925,26 @@ class Bluez_Listener(dbus_bluez.Listener):
                             self.parent.listItems[path].setProperty(str(prop), str(changed[prop]))
                     if 'RSSI' in changed:
                         self.parent.listItems[path].setProperty('Strength', str(rssi_to_percentage(int(changed['RSSI']))))
+                    if interface == dbus_bluez.INTERFACE_DEVICE and 'Connected' in changed:
+                        if changed['Connected']:
+                            refresh = True
+                        else:
+                            self.parent.listItems[path].setProperty('BatteryLevel', '')
                 else:
                     refresh = True
             if refresh:
                 self.parent.discover_devices()
+
+    def _update_battery(self, path, percentage):
+        with oe.gui_lock:
+            if not self.parent.visible or not bluetooth_menu_active():
+                return
+            item = self.parent.listItems.get(path)
+            if item is not None:
+                level = dbus_bluez.battery_level(percentage)
+                if item.getProperty('Connected') not in ('1', 'True'):
+                    level = ''
+                item.setProperty('BatteryLevel', level)
 
 
 ####################################################################

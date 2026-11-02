@@ -1458,3 +1458,7 @@ msgstr ""
 msgctxt "#33531"
 msgid "UAS setting changed.[CR]A reboot is required for the new setting to take effect."
 msgstr ""
+
+msgctxt "#33532"
+msgid "Battery"
+msgstr ""

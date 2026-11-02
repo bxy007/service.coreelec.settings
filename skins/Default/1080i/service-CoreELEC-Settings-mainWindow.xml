@@ -921,6 +921,18 @@
                             <textcolor>red</textcolor>
                             <label>$ADDON[service.coreelec.settings 32333][COLOR=white]$INFO[ListItem.Property(ConnectedState)][/COLOR]</label>
                         </control>
+                        <!-- Cached device battery, when reported by BlueZ -->
+                        <control type="label">
+                            <left>1000</left>
+                            <top>19</top>
+                            <width>230</width>
+                            <height>20</height>
+                            <font>font12</font>
+                            <align>right</align>
+                            <textcolor>red</textcolor>
+                            <label>$ADDON[service.coreelec.settings 33532]: [COLOR=white]$INFO[ListItem.Property(BatteryLevel)][/COLOR]</label>
+                            <visible>!String.IsEmpty(ListItem.Property(BatteryLevel))</visible>
+                        </control>
                         <!-- Paired Symbol (bottom right) -->
                         <control type="image">
                             <left>1180</left>
@@ -1135,6 +1147,18 @@
                             <font>font12</font>
                             <textcolor>red</textcolor>
                             <label>$ADDON[service.coreelec.settings 32333][COLOR=white]$INFO[ListItem.Property(ConnectedState)][/COLOR]</label>
+                        </control>
+                        <!-- Cached device battery, when reported by BlueZ -->
+                        <control type="label">
+                            <left>1000</left>
+                            <top>19</top>
+                            <width>230</width>
+                            <height>20</height>
+                            <font>font12</font>
+                            <align>right</align>
+                            <textcolor>red</textcolor>
+                            <label>$ADDON[service.coreelec.settings 33532]: [COLOR=white]$INFO[ListItem.Property(BatteryLevel)][/COLOR]</label>
+                            <visible>!String.IsEmpty(ListItem.Property(BatteryLevel))</visible>
                         </control>
                         <!-- Paired Symbol (bottom right) -->
                         <control type="image">

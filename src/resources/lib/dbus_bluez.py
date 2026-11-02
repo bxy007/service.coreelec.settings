@@ -14,6 +14,7 @@ INTERFACE_ADAPTER = 'org.bluez.Adapter1'
 INTERFACE_AGENT = 'org.bluez.Agent1'
 INTERFACE_AGENT_MANAGER = 'org.bluez.AgentManager1'
 INTERFACE_DEVICE = 'org.bluez.Device1'
+INTERFACE_BATTERY = 'org.bluez.Battery1'
 PATH_BLUEZ = '/org/bluez'
 PATH_AGENT = '/CoreELEC/agent/bluez'
 
@@ -219,12 +220,25 @@ def find_adapter():
                 return path
 
 
+def battery_level(percentage):
+    # BlueZ's cached Battery1 value; unknown is not an empty battery.
+    if type(percentage) is int and 0 <= percentage <= 100:
+        return f'{percentage}%'
+    return ''
+
+
 def find_devices():
     devices = {}
     objects = get_managed_objects()
     for path, interfaces in objects.items():
         if interfaces.get(INTERFACE_DEVICE):
-            devices[path] = interfaces[INTERFACE_DEVICE]
+            device = dict(interfaces[INTERFACE_DEVICE])
+            # Reuse the existing object snapshot. Never read GATT characteristics
+            # or enable notifications to obtain a battery value for the UI.
+            device['BatteryLevel'] = battery_level(
+                interfaces.get(INTERFACE_BATTERY, {}).get('Percentage')
+            ) if device.get('Connected') else ''
+            devices[path] = device
     return devices
 
 
